@@ -5,11 +5,12 @@ import cv2
 from sklearn import svm
 import time
 from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from keras.models import Sequential
+from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D, Dropout
+from keras.layers.normalization import BatchNormalization
 
-
-x = []
+x= []
 y = []
 
 #directory = input("Please enter your storage point")
@@ -65,7 +66,7 @@ x = np.array(x)
 y = np.array(y)
 
 
-np.random.seed(1)  
+np.random.seed(57)  
 np.random.shuffle(x)
 np.random.shuffle(y)
 
@@ -93,46 +94,55 @@ x_test = x__test
 
 mean = 0
 std = 0
-x_train = x_train.reshape(x_train.shape[0], 101*101)
+#x_train = x_train.reshape(x_train.shape[0], 101*101)
 mean = np.mean(x_train)
 std = np.std(x_train)
+
 x_train = (x_train-mean)/std
-new_col = np.ones(train_size).reshape(train_size,1)
-x_train =  np.append(x_train,new_col,axis=1)
+x_train = x_train.reshape(x_train.shape[0],101,101,1)
 
-x_test = x_test.reshape(x_test.shape[0], 101*101)
+
 x_test = (x_test-mean)/std
-new_col = np.ones(test_size).reshape(test_size,1)
-x_test =  np.append(x_test,new_col,axis=1)
+x_test = x_test.reshape(x_test.shape[0],101,101,1)
+
+encoder = OneHotEncoder()
+t = encoder.fit_transform(y_train.reshape((-1,1)))
+t = t.toarray()
+
+t_test = encoder.transform(y_test.reshape((-1,1)))
+t_test = t_test.toarray() 
     
-y_train = np.array(y_train,dtype= 'f')
-y_test = np.array(y_test,dtype= 'f')
+#y_train = np.array(y_train,dtype= 'f')
+#y_test = np.array(y_test,dtype= 'f')
 
 
-sc = StandardScaler()
-x_tr = sc.fit_transform(x_train)
-x_te = sc.transform(x_test)
+#create model
+model = Sequential() #add model layers
+model.add(Conv2D(32, kernel_size=3, activation='relu', input_shape=(101,101,1)))
+model.add(MaxPooling2D(pool_size=(3,3)))
+model.add(Conv2D(64, kernel_size=5, activation='relu'))
+model.add(MaxPooling2D(pool_size=(10,10)))
+model.add(Flatten())
+model.add(Dense(2, activation='softmax'))
 
 
-# minimum number of principal components such that 95% of the variance is retained
-pca = PCA(0.95)
-pca.fit(x_tr);
-x_tr = pca.transform(x_tr)
-x_te = pca.transform(x_te)
-
-start_time = time.time()
-clf = svm.SVC(C = 1.0,kernel = 'rbf')
+#compile model using accuracy to measure model performance
+model.compile(optimizer='RMSprop', loss='binary_crossentropy', metrics=['accuracy'])
 
 
-clf.fit(x_tr,y_train)
-print("--- %s seconds for training---" % (time.time() - start_time))
+model.fit(x_train, t, epochs=6)
 
-start_time = time.time()
-y_pred = clf.predict(x_te)
-print("--- %s seconds for testing---" % (time.time() - start_time))
-    
-print(confusion_matrix(y_test,y_pred))
-print(classification_report(y_test,y_pred))
+score = model.evaluate(x_test, t_test)
+
+print('Test loss:', score[0])
+print('Test accuracy:', score[1])
+
+# serialize model to JSON
+model_json = model.to_json()
+with open("model.json", "w") as json_file:
+    json_file.write(model_json)
+# serialize weights to HDF5
+#model.save_weights("model.h5")
 
 
-
+#model.save("4LayerModel_5.h5")
